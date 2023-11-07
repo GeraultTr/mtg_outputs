@@ -1,7 +1,7 @@
 # Import
 import openalea.plantgl.all as pgl
 
-from root_cynaps.tools import plot_mtg
+from src.tools_mtg import plot_mtg
 
 import matplotlib.pyplot as plt
 from matplotlib.backend_bases import MouseButton
@@ -11,93 +11,9 @@ import numpy as np
 from time import sleep
 
 
-### Output parameters
-state_extracts = dict(
-    # Next nitrogen properties
-    Nm=dict(unit="mol N.g-1", value_example=float(1e-4), description="not provided"),
-    AA=dict(unit="mol N.g-1", value_example=float(9e-4), description="not provided"),
-    struct_protein=dict(unit="mol N.g-1", value_example=float(0), description="not provided"),
-    storage_protein=dict(unit="mol N.g-1", value_example=float(0), description="not provided"),
-    xylem_Nm=dict(unit="mol N.s-1", value_example=float(1e-4), description="not provided"),
-    xylem_AA=dict(unit="mol N.s-1", value_example=float(1e-4), description="not provided"),
-    xylem_struct_mass=dict(unit="g", value_example=float(1e-3), description="not provided"),
-    phloem_struct_mass=dict(unit="g", value_example=float(1e-3), description="not provided"),
-    # Water model
-    xylem_water=dict(unit="mol H2O", value_example=float(0), description="not provided"),
-    # Topology model
-    root_exchange_surface=dict(unit="m2", value_example=float(0), description="not provided"),
-    stele_exchange_surface=dict(unit="m2", value_example=float(0), description="not provided"),
-    phloem_exchange_surface=dict(unit="m2", value_example=float(0), description="not provided"),
-    apoplasmic_stele=dict(unit="adim", value_example=float(0.5), description="not provided"),
-    xylem_volume=dict(unit="m3", value_example=float(0), description="not provided"),
-    # Soil boundaries
-    soil_water_pressure=dict(unit="Pa", value_example=float(-0.1e6), description="not provided"),
-    soil_temperature=dict(unit="K", value_example=float(283.15), description="not provided"),
-    soil_Nm=dict(unit="mol N.m-3", value_example=float(0.5), description="not provided"),
-    soil_AA=dict(unit="mol AA.m-3", value_example=float(0), description="not provided"),
-    # Rhizodep properties
-    struct_mass=dict(unit="g", value_example=0.000134696, description="not provided"),
-    distance_from_tip=dict(unit="m", value_example=float(0.026998706), description="Distance between the root segment and the considered root axis tip")
-    # C_hexose_root=dict(unit="mol.g-1", value_example=0.000134696, description="not provided")
-)
+def plot_N(g, p, axs, prop_extracts, span_slider=0.1):
 
-flow_extracts = dict(
-    import_Nm=dict(unit="mol N.s-1", value_example=float(0), description="not provided"),
-    import_AA=dict(unit="mol AA.s-1", value_example=float(0), description="not provided"),
-    export_Nm=dict(unit="mol N.s-1", value_example=float(0), description="not provided"),
-    export_AA=dict(unit="mol N.s-1", value_example=float(0), description="not provided"),
-    diffusion_Nm_soil=dict(unit="mol N.s-1", value_example=float(0), description="not provided"),
-    diffusion_Nm_xylem=dict(unit="mol N.s-1", value_example=float(0), description="not provided"),
-    diffusion_Nm_soil_xylem=dict(unit="mol N.s-1", value_example=float(0), description="not provided"),
-    diffusion_AA_soil=dict(unit="mol N.s-1", value_example=float(0), description="not provided"),
-    diffusion_AA_phloem=dict(unit="mol N.s-1", value_example=float(0), description="not provided"),
-    diffusion_AA_soil_xylem=dict(unit="mol N.s-1", value_example=float(0), description="not provided"),
-    displaced_Nm_in=dict(unit="mol N.time_step-1", value_example=float(0), description="not provided"),
-    displaced_Nm_out=dict(unit="mol N.time_step-1", value_example=float(0), description="not provided"),
-    displaced_AA_in=dict(unit="mol N.time_step-1", value_example=float(0), description="not provided"),
-    displaced_AA_out=dict(unit="mol N.time_step-1", value_example=float(0), description="not provided"),
-    cumulated_radial_exchanges_Nm=dict(unit="mol N.time_step-1", value_example=float(0), description="not provided"),
-    cumulated_radial_exchanges_AA=dict(unit="mol N.time_step-1", value_example=float(0), description="not provided"),
-    AA_synthesis=dict(unit="mol N.s-1", value_example=float(0), description="not provided"),
-    struct_synthesis=dict(unit="mol N.s-1", value_example=float(0), description="not provided"),
-    storage_synthesis=dict(unit="mol N.s-1", value_example=float(0), description="not provided"),
-    AA_catabolism=dict(unit="mol N.s-1", value_example=float(0), description="not provided"),
-    storage_catabolism=dict(unit="mol N.s-1", value_example=float(0), description="not provided"),
-    # Water model
-    radial_import_water=dict(unit="mol H2O.s-1", value_example=float(0), description="not provided"),
-    axial_export_water_up=dict(unit="mol H2O.h-1", value_example=float(0), description="not provided"),
-    axial_import_water_down=dict(unit="mol H2O.h-1", value_example=float(0), description="not provided"),
-    shoot_uptake=dict(unit="mol H2O.h-1", value_example=float(0), description="not provided")
-)
-
-global_state_extracts = dict(
-    total_Nm=dict(unit="mol", value_example="not provided",  description="not provided"),
-    total_AA=dict(unit="mol", value_example="not provided", description="not provided"),
-    total_hexose=dict(unit="mol", value_example="not provided", description="not provided"),
-    total_cytokinins=dict(unit="mol", value_example="not provided", description="not provided"),
-    total_struct_mass=dict(unit="mol", value_example="not provided", description="not provided"),
-    xylem_total_Nm=dict(unit="mol", value_example="not provided", description="not provided"),
-    xylem_total_AA=dict(unit="mol", value_example="not provided", description="not provided"),
-    phloem_total_AA=dict(unit="mol", value_example="not provided", description="not provided"),
-    xylem_total_water=dict(unit="mol", value_example="not provided", description="not provided"),
-    xylem_total_pressure=dict(unit="Pa", value_example="not provided", description="not provided")
-)
-
-global_flow_extracts = dict(
-    Nm_root_shoot_xylem=dict(unit="mol.time_step-1", value_example="not provided",  description="not provided"),
-    AA_root_shoot_xylem=dict(unit="mol.time_step-1", value_example="not provided", description="not provided"),
-    Unloading_Amino_Acids=dict(unit="mol.time_step-1", value_example="not provided", description="not provided"),
-    Export_cytokinins=dict(unit="UA.time_step-1", value_example="not provided", description="not provided"),
-    cytokinin_synthesis=dict(unit="mol", value_example="not provided", description="not provided"),
-    actual_transpiration=dict(unit="mol.time_step-1", value_example="not provided", description="not provided"),
-    Total_Transpiration=dict(unit="mol.time_step-1", value_example="not provided", description="not provided"),
-    total_AA_rhizodeposition=dict(unit="mol.time_step-1", value_example="not provided", description="not provided")
-)
-
-
-def plot_N(g, p, axs, span_slider=0.1):
-
-    range_min, range_max = [0 for k in flow_extracts], [0 for k in flow_extracts]
+    range_min, range_max = [0 for k in prop_extracts], [0 for k in prop_extracts]
     scene = pgl.Scene()
     for k in range(len(p)):
         # Computing plot ranges for the selected properties
@@ -140,6 +56,7 @@ def plot_xr(datasets, vertice=[], summing=0, selection=[], supplementary_legend=
     for k in range(len(selection)):
         lb.insert(k, selection[k])
 
+    # to avoid double window popup
     plt.ioff()
     # Check the number of plots for right subplot divisions
     if len(vertice) in (0, 1):
@@ -183,8 +100,14 @@ def plot_xr(datasets, vertice=[], summing=0, selection=[], supplementary_legend=
                                                                      label=prop + supplementary_legend[d],
                                                                      add_legend=False)
                         text_annot[0] += [ax[0].text(0, 0, ""), ax[0].text(0, 0, "")]
-                        legend += [combination]
+                        if len(np.unique(v_extract.coords["stk"])) > 1:
+                            legend += [combination]
+                        else:
+                            legend += [""]
                         unit += [getattr(combination_extract, prop).attrs["unit"]]
+                        ax[0].get_lines()[-1].set_label('_' + ax[0].get_lines()[-1].get_label() + ' (' + unit[-1] + ')')
+                        ax[0].get_lines()[-1].set_visible(False)
+
             ax[0].set_ylabel("")
             ax[0].set_title("")
 
@@ -201,8 +124,14 @@ def plot_xr(datasets, vertice=[], summing=0, selection=[], supplementary_legend=
                     for prop in selection:
                         getattr(combination_extract, prop).plot.line(x='t', ax=ax[k], label=prop + supplementary_legend[d], add_legend=False)
                         text_annot[k] += [ax[k].text(0, 0, ""), ax[k].text(0, 0, "")]
-                        legend += [combination]
+                        if len(np.unique(v_extract.coords["stk"])) > 1:
+                            legend += [combination]
+                        else:
+                            legend += [""]
                         unit += [getattr(combination_extract, prop).attrs["unit"]]
+                        ax[k].get_lines()[-1].set_label('_' + ax[k].get_lines()[-1].get_label() + ' (' + unit[-1]+')')
+                        ax[k].get_lines()[-1].set_visible(False)
+
                 ax[k].set_ylabel("")
                 ax[k].set_title("")
 
@@ -270,15 +199,12 @@ def plot_xr(datasets, vertice=[], summing=0, selection=[], supplementary_legend=
                         cont, ind = line.contains(event)
                         if cont:
                             line.set_visible(False)
+                            line.set_label('_'+line.get_label())
                             ax[axe].relim(visible_only=True)
                             ax[axe].autoscale()
-        elif event.button is MouseButton.LEFT:
-            for axe in range(len(ax)):
-                # if mouse event is in the ax
-                if event.inaxes == ax[axe]:
-                    ax[axe].relim(visible_only=True)
-                    ax[axe].autoscale()
-        canvas.draw()
+                            ax[axe].legend()
+            canvas.draw()
+
 
     def on_lb_select(event):
         # TODO maybe add possibility to normalize-add a plot for ease of reading
@@ -288,10 +214,13 @@ def plot_xr(datasets, vertice=[], summing=0, selection=[], supplementary_legend=
         # for each row
         for axe in range(len(ax)):
             for line in ax[axe].get_lines():
-                if line.get_label() == value:
+                if value in line.get_label():
                     line.set_visible(True)
+                    if line.get_label()[0] == '_':
+                        line.set_label(line.get_label()[1:])
             ax[axe].relim(visible_only=True)
             ax[axe].autoscale()
+            ax[axe].legend()
         canvas.draw()
 
     lb.bind('<<ListboxSelect>>', on_lb_select)

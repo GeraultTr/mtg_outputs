@@ -1,9 +1,10 @@
-from src.tools_output import plot_xr, global_state_extracts, global_flow_extracts
+from src.tools_output import plot_xr
 from src.tools_mtg import plot_mtg
 import openalea.plantgl.all as pgl
 
 
-def launch_analysis(dataset, mtg, output_dir="", global_sensitivity=True, global_plots=True, plot_architecture=True, STM_clustering=True):
+def launch_analysis(dataset, mtg, global_state_extracts, global_flow_extracts, state_extracts, flow_extracts,
+                    output_dir="", global_sensitivity=True, global_plots=True, plot_architecture=True, STM_clustering=True):
     if global_sensitivity:
         # TERMINAL SENSITIVITY ANALYSIS
         # TODO : general sensitivity analysis on time-series data, but issue of post simulation Sensitivity Methods not existing
@@ -12,7 +13,7 @@ def launch_analysis(dataset, mtg, output_dir="", global_sensitivity=True, global
 
         print("[INFO] Performing regression sensitivity on model final global states...")
         from src import global_sensitivity
-        global_sensitivity.regression_analysis(dataset=dataset, output_path=output_dir)
+        global_sensitivity.regression_analysis(dataset=dataset, output_path=output_dir, extract_prop=global_state_extracts)
 
     if global_plots:
         # PLOTTING GLOBAL OUTPUTS
@@ -46,4 +47,4 @@ def launch_analysis(dataset, mtg, output_dir="", global_sensitivity=True, global
         # TODO : adapt to sliding windows along roots ?
         print("[INFO] Performing local organs' physiology clustering...")
         from src import STM_analysis
-        STM_analysis.run(file=dataset, output_path=output_dir)
+        STM_analysis.run(file=dataset, output_path=output_dir, extract_props=flow_extracts)

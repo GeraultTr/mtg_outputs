@@ -5,8 +5,8 @@ from keras.models import Model, load_model
 import umap
 import hdbscan
 
-import tools.analysis.time_series_projection
-from tools.analysis.time_series_projection import Preprocessing, DCAE
+import src.analysis.time_series_projection
+from src.analysis.time_series_projection import Preprocessing, DCAE
 
 '''SCRIPT'''
 input_type = "mtg"
@@ -28,37 +28,9 @@ min_cluster_size = 5000
 min_samples = 10
 
 
-# Properties of interest (Remove constant variables or training will fail)
-# TODO actualize
-flow_extracts = dict(
-    # SUPPLEMENTARY COORDINATES
-    distance_from_tip=dict(unit="m", value_example=float(0.026998706), description="Distance between the root segment and the considered root axis tip"),
-    # REAL VARIABLES OF INTEREST
-    import_Nm=dict(unit="mol N.s-1", value_example=float(0), description="not provided"),
-    export_Nm=dict(unit="mol N.s-1", value_example=float(0), description="not provided"),
-    export_AA=dict(unit="mol N.s-1", value_example=float(0), description="not provided"),
-    # diffusion_Nm_soil=dict(unit="mol N.s-1", value_example=float(0), description="not provided"),
-    diffusion_Nm_xylem=dict(unit="mol N.s-1", value_example=float(0), description="not provided"),
-    # diffusion_Nm_soil_xylem=dict(unit="mol N.s-1", value_example=float(0), description="not provided"),
-    # diffusion_AA_soil=dict(unit="mol N.s-1", value_example=float(0), description="not provided"),
-    diffusion_AA_phloem=dict(unit="mol N.s-1", value_example=float(0), description="not provided"),
-    # diffusion_AA_soil_xylem=dict(unit="mol N.s-1", value_example=float(0), description="not provided"),
-    AA_synthesis=dict(unit="mol N.s-1", value_example=float(0), description="not provided"),
-    struct_synthesis=dict(unit="mol N.s-1", value_example=float(0), description="not provided"),
-    storage_synthesis=dict(unit="mol N.s-1", value_example=float(0), description="not provided"),
-    AA_catabolism=dict(unit="mol N.s-1", value_example=float(0), description="not provided"),
-    # storage_catabolism=dict(unit="mol N.s-1", value_example=float(0), description="not provided"),
-    # Water model
-    radial_import_water=dict(unit="mol H2O.s-1", value_example=float(0), description="not provided"),
-    axial_export_water_up=dict(unit="mol H2O.s-1", value_example=float(0), description="not provided"),
-    axial_import_water_down=dict(unit="mol H2P.s-1", value_example=float(0), description="not provided")
-)
-
-
-def run_analysis(file, output_path, input_type=input_type, import_model=import_model, train_model=train_model, dev=dev, window=window,
+def run_analysis(file, output_path, extract_props, input_type=input_type, import_model=import_model, train_model=train_model, dev=dev, window=window,
                  EPOCHS=EPOCHS, BS=BS, test_prop=test_prop, umap_seed=umap_seed, umap_dim=umap_dim, n_neighbors=n_neighbors, min_dist=min_dist,
-                 min_cluster_size=min_cluster_size, min_samples=min_samples,
-                 flow_extracts=flow_extracts):
+                 min_cluster_size=min_cluster_size, min_samples=min_samples):
     '''
     Description
     This function runs the main workflow for
@@ -69,7 +41,7 @@ def run_analysis(file, output_path, input_type=input_type, import_model=import_m
 
     # Import and preprocess data
     print("[INFO] Preprocessing saved file...")
-    preprocess = Preprocessing(central_dataset=file, type=input_type, variables=flow_extracts, window=window)
+    preprocess = Preprocessing(central_dataset=file, type=input_type, variables=extract_props, window=window)
 
     # stacked_dataset = [np.array(k) for k in preprocess.stacked_dataset]
 
@@ -80,7 +52,7 @@ def run_analysis(file, output_path, input_type=input_type, import_model=import_m
     else:
         # Build the convolutional autoencoder
         print("[INFO] Building autoencoder...")
-        (encoder, decoder, autoencoder) = DCAE.build(height=1, width=window, depth=len(flow_extracts),
+        (encoder, decoder, autoencoder) = DCAE.build(height=1, width=window, depth=len(extract_props),
                                                      filters=((64, 10, 2), (32, 5, 2), (12, 5, 3)), latentDim=window)
 
     if train_model:
@@ -144,8 +116,8 @@ def run_analysis(file, output_path, input_type=input_type, import_model=import_m
     if len(hdbscan_clusters) > 0:
         while dev:
             # If re-running, reload the local plotting library
-            importlib.reload(tools.analysis.time_series_projection)
-            from tools.analysis.time_series_projection import MainMenu
+            importlib.reload(src.analysis.time_series_projection)
+            from src.analysis.time_series_projection import MainMenu
 
             main_menu = MainMenu(windows_ND_projection=windows_ND_embedding, latent_windows=latent_windows,
                                  sliced_windows=preprocess.stacked_da, original_unorm_dataset=preprocess.unormalized_ds,
