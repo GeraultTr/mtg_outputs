@@ -47,4 +47,7 @@ def launch_analysis(dataset, mtg, global_state_extracts, global_flow_extracts, s
         # TODO : adapt to sliding windows along roots ?
         print("[INFO] Performing local organs' physiology clustering...")
         from src import STM_analysis
-        STM_analysis.run(file=dataset, output_path=output_dir, extract_props=flow_extracts)
+        pool_locals = {}
+        pool_locals.update(state_extracts)
+        pool_locals.update(flow_extracts)
+        STM_analysis.run(file=dataset, output_path=output_dir, extract_props=pool_locals)

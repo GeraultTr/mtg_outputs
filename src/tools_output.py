@@ -205,7 +205,6 @@ def plot_xr(datasets, vertice=[], summing=0, selection=[], supplementary_legend=
                             ax[axe].legend()
             canvas.draw()
 
-
     def on_lb_select(event):
         # TODO maybe add possibility to normalize-add a plot for ease of reading
         w = event.widget

@@ -36,14 +36,14 @@ from scipy.stats import f_oneway
 from statsmodels.multivariate.manova import MANOVA
 from statsmodels.stats.multicomp import pairwise_tukeyhsd
 
-from root_cynaps.tools_output import plot_xr
+from src.tools_output import plot_xr
 
 '''FUNCTIONS'''
 
 
 class Preprocessing:
     def __init__(self, central_dataset, type='csv', variables={}, window=24, stride=12):
-        self.unormalized_ds = central_dataset[list(variables.keys())]
+        self.unormalized_ds = central_dataset[list(variables.keys())].fillna(0)
         del central_dataset
 
         self.normalized_ds = self.normalization(self.unormalized_ds).fillna(0)
