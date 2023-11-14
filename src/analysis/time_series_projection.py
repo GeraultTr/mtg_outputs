@@ -13,7 +13,6 @@ conda install -c conda-forge hdbscan
 '''IMPORTS'''
 # Data processing packages
 import pandas as pd
-import xbatcher as xb
 import numpy as np
 # Visual packages
 import matplotlib.pyplot as plt
@@ -43,24 +42,44 @@ from src.tools_output import plot_xr
 
 class Preprocessing:
     def __init__(self, central_dataset, type='csv', variables={}, window=24, stride=12):
-        self.unormalized_ds = central_dataset[list(variables.keys())].fillna(0)
+        self.unormalized_ds = central_dataset[list(variables.keys())]
         del central_dataset
 
-        self.normalized_ds = self.normalization(self.unormalized_ds).fillna(0)
+        self.normalized_ds = self.normalization(self.unormalized_ds)
 
         # stacking to put every sliced window on the same learning slope then
-        self.normalized_ds = self.normalized_ds.stack(stk=[dim for dim in self.normalized_ds.dims if dim != "t"])
+        n_windows = int(1 + ((max(self.normalized_ds.coords["t"].values) - window + 1) / stride))
 
-        n_windows = int(1 + ((max(self.normalized_ds.coords["t"].values)-window + 1)/stride))
+        # Slicing the dataset into windows
+        roller = self.normalized_ds.rolling(dim=dict(t=window), center=True)
+        rolled_ds = roller.construct(window_dim={"t": "window_time"}, stride=stride)
+        # stacking to put every sliced window on the same learning slope then
+        rolled_ds = rolled_ds.stack(window_id=[dim for dim in rolled_ds.dims if dim not in "window_time"])
 
         self.labels, self.t_windows = [], []
-        for coord in self.normalized_ds.coords["stk"].values:
-            self.t_windows += [k*stride for k in range(n_windows)]
-            self.labels += [coord]*n_windows
+        for coord in rolled_ds.coords["window_id"].values:
+            # Log times corresponding to each window
+            self.t_windows += [k * stride for k in range(n_windows)]
+            # Log labels for future prints
+            self.labels += [coord] * n_windows
 
-        bgen = xb.BatchGenerator(self.normalized_ds.to_array().transpose("stk", "variable", "t"), input_dims={'stk': 1, 't': window}, input_overlap={"t": window-stride}, preload_batch=True)
         depth = len(variables)
-        self.stacked_da = np.concatenate([[reshape(batch, shape=(1, window, depth))] for batch in bgen])
+
+        self.stacked_win = [reshape(win, shape=(1, window, depth)) for win in np.concatenate(rolled_ds.to_array().transpose("window_id", "t", "variable", "window_time"))]
+
+        # If some windows are incomplete, they are thrown away from the training dataset.
+
+        deleted = 0
+        for index in range(len(self.stacked_win)):
+            i = index - deleted
+            if True in np.isnan(self.stacked_win[i]):
+                del self.stacked_win[i]
+                deleted += 1
+
+        # Convert to array as it is expected by the DCAE
+        self.stacked_da = np.array(self.stacked_win)
+
+        self.unormalized_ds = self.unormalized_ds.fillna(0.)
 
     def normalization(self, dataset):
         """
@@ -166,8 +185,8 @@ class MainMenu:
         self.coordinates = coordinates
         self.window = window
         self.windows_time = windows_time
-        self.vid_numbers = np.unique([index[-1] for index in self.coordinates])
-        self.sensitivity_coordinates = [index[:-1] for index in self.coordinates]
+        self.vid_numbers = np.unique([index[0] for index in self.coordinates])
+        self.sensitivity_coordinates = [index[1:] for index in self.coordinates]
 
         # Tk init
         self.root = tk.Tk()
@@ -247,7 +266,7 @@ class MainMenu:
 
         # Back to original data
         # grouping separated variable windows to use indexes selected by clusters
-        clusters_windows = [self.sliced_windows[k] for k in self.clusters]
+        clusters_windows = [[self.sliced_windows[win] for win in group] for group in self.clusters]
         # For each of the clusters, for each variable, we compute the mean of values for t0, t1, ...
         # Index 0 is used for windows because that's how the DCAE input shape was designed (1 x window x nb_props)
         curve_sets_clusters = [[[[win[0][t][v] for win in clst] for t in range(self.window)] for v in range(nb_props)] for clst in clusters_windows]
@@ -273,13 +292,9 @@ class MainMenu:
         return abcs, mean_diff_bcs
 
     def cluster_info(self):
-        print("[INFO] Comparing clusters...")
-        if len(self.clusters) == 0:
-            print("[Error] : no cluster selected")
-            return
-
         abcs, mean_diff_between_clusters = self.compute_group_area_between_curves()
 
+        print("[INFO] Plotting clusters")
         fig3 = plt.figure(figsize=(12, 10))
         gs = gridspec.GridSpec(2, len(self.clusters), height_ratios=[1, 2], figure=fig3)
 
@@ -331,6 +346,7 @@ class MainMenu:
             plot_xr(datasets=self.original_unorm_dataset, vertice=[layer], selection=self.properties)
 
     def cluster_sensitivity_test(self, alpha=0.05):
+        print("[INFO] Testing sensitivity to different scenarios")
         # Starting with multivariate anova assuming normality
         # Dataframe formating...
         classes = []
@@ -385,9 +401,8 @@ class MainMenu:
             fig_tuckey.show()
 
     def build_app(self):
-        # time is an axis as others, rather, default color corresponding coordinates on structure
-        # For a given cluster, it wil enable user to select 2D plots of interest for targeted layers, WITH corresponding clusters highlighted (and refreshed)
-
-        self.cluster_info()
-        self.cluster_sensitivity_test()
+        if len(self.clusters) > 1:
+            print(f"[INFO] Comparing clusters...")
+            self.cluster_info()
+            self.cluster_sensitivity_test()
         self.root.mainloop()

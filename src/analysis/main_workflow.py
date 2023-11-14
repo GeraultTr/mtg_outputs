@@ -93,6 +93,8 @@ def run_analysis(file, output_path, extract_props, input_type=input_type, import
     for c in range(len(clusterer.labels_)):
         hdbscan_clusters[groups.index(clusterer.labels_[c])] += [c]
 
+    print(f"[INFO] Got {len(hdbscan_clusters)} clusters from HDBSCAN")
+
     # Plotting projection
     if umap_dim != 3:
         plot = False
@@ -104,7 +106,7 @@ def run_analysis(file, output_path, extract_props, input_type=input_type, import
         if len(hdbscan_clusters) > 0:
             from tools.analysis.time_series_projection import MainMenu
             main_menu = MainMenu(windows_ND_projection=windows_ND_embedding, latent_windows=latent_windows,
-                                 sliced_windows=preprocess.stacked_da, original_unorm_dataset=preprocess.unormalized_ds,
+                                 sliced_windows=preprocess.stacked_win, original_unorm_dataset=preprocess.unormalized_ds,
                                  original_dataset=preprocess.normalized_ds, coordinates=preprocess.labels,
                                  clusters=hdbscan_clusters, window=window, plot=plot, windows_time=preprocess.t_windows,
                                  output_path=output_path)
@@ -120,7 +122,7 @@ def run_analysis(file, output_path, extract_props, input_type=input_type, import
             from src.analysis.time_series_projection import MainMenu
 
             main_menu = MainMenu(windows_ND_projection=windows_ND_embedding, latent_windows=latent_windows,
-                                 sliced_windows=preprocess.stacked_da, original_unorm_dataset=preprocess.unormalized_ds,
+                                 sliced_windows=preprocess.stacked_win, original_unorm_dataset=preprocess.unormalized_ds,
                                  original_dataset=preprocess.normalized_ds, coordinates=preprocess.labels,
                                  clusters=hdbscan_clusters, window=window, plot=plot, windows_time=preprocess.t_windows, output_path=output_path)
             main_menu.build_app()
