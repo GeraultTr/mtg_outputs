@@ -12,32 +12,33 @@ from src.analysis.time_series_projection import Preprocessing, DCAE
 input_type = "mtg"
 
 # DCAE parameters
-import_model, train_model = False, True
+import_model = False
+train_model = not import_model
 dev = True
 window = 24
-EPOCHS = 25
+EPOCHS = 10
 BS = 100
 test_prop = 0.2
 # UMAP Parameters
-umap_seed = 42
-umap_dim = 10  #
-n_neighbors = 50  #
-min_dist = 0.05  #
+umap_seed = 42  # Set if you want consistency (default None)
+umap_dim = 12   # Number of dimensions to reduce (max is 24)
+n_neighbors = 30  # We increase the number of neighbors to prevent focusing on too local data structure (default 15)
+min_dist = 0.0  # We decrease this value to densely pack clusters and ease clustering (default 0)
 # HDBSCAN Parameters
-min_cluster_size = 5000
-min_samples = 10
+min_cluster_size = 1000  # Adjust this value if the number of produced similar clusters is to high (default 500)
+min_samples = 10  # Number of necessary neighbors to consider a point is a cluster core point (default None)
 
 
 def run_analysis(file, output_path, extract_props, input_type=input_type, import_model=import_model, train_model=train_model, dev=dev, window=window,
                  EPOCHS=EPOCHS, BS=BS, test_prop=test_prop, umap_seed=umap_seed, umap_dim=umap_dim, n_neighbors=n_neighbors, min_dist=min_dist,
                  min_cluster_size=min_cluster_size, min_samples=min_samples):
-    '''
+    """
     Description
     This function runs the main workflow for
 
     :param file: xarray datadset containing 't', 'vid and supplementary scenario parameters
 
-    '''
+    """
 
     # Import and preprocess data
     print("[INFO] Preprocessing saved file...")
@@ -82,9 +83,9 @@ def run_analysis(file, output_path, extract_props, input_type=input_type, import
     windows_ND_embedding = umap_reducer_ND.fit_transform(latent_windows)
 
     print("[INFO] HDBSCAN clustering...")
-    clusterer = hdbscan.HDBSCAN(algorithm='best', alpha=1.0, approx_min_span_tree=True,
-                                gen_min_span_tree=False, leaf_size=40, metric='euclidean', min_cluster_size=min_cluster_size,
-                                min_samples=min_samples, p=None)
+    clusterer = hdbscan.HDBSCAN(algorithm='best', alpha=1.0, leaf_size=40, cluster_selection_method='eom',
+                                metric='euclidean', allow_single_cluster=False, min_cluster_size=min_cluster_size,
+                                min_samples=min_samples)
 
     clusterer.fit(windows_ND_embedding)
 
@@ -104,7 +105,7 @@ def run_analysis(file, output_path, extract_props, input_type=input_type, import
     # If this is user call of the analysis
     if not dev:
         if len(hdbscan_clusters) > 0:
-            from tools.analysis.time_series_projection import MainMenu
+            from src.analysis.time_series_projection import MainMenu
             main_menu = MainMenu(windows_ND_projection=windows_ND_embedding, latent_windows=latent_windows,
                                  sliced_windows=preprocess.stacked_win, original_unorm_dataset=preprocess.unormalized_ds,
                                  original_dataset=preprocess.normalized_ds, coordinates=preprocess.labels,
@@ -128,7 +129,6 @@ def run_analysis(file, output_path, extract_props, input_type=input_type, import
             main_menu.build_app()
             again = input("reimport and replot? ([Y]/n)")
             if again not in ("y", "Y", ""):
-                print(again)
                 dev = False
 
     else:

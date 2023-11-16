@@ -19,6 +19,7 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 from matplotlib.colors import CenteredNorm
 import tkinter as tk
+import xarray as xr
 
 # Tensor management packages
 from tensorflow import keras, reshape
@@ -177,7 +178,7 @@ class MainMenu:
         # Retrieving necessary dataset
         self.original_unorm_dataset = original_unorm_dataset
         self.original_dataset = original_dataset
-        self.sliced_windows = sliced_windows
+        self.sliced_windows = np.array(sliced_windows)
         self.latent_windows = latent_windows
         self.windows_ND_projection = windows_ND_projection
 
@@ -193,25 +194,46 @@ class MainMenu:
         self.root.title('ND UMAP projection of extracted windows')
         self.output_path = output_path
 
-        # Listbox widget
+        # Vid Listbox widget
         self.lb = tk.Listbox(self.root)
+        scrollbar = tk.Scrollbar(self.root)
         for k in range(len(self.vid_numbers)):
             self.lb.insert(k, str(self.vid_numbers[k]))
         self.lb.grid(row=1, column=2, sticky='N')
+        scrollbar.grid(row=1, column=1, sticky='NS')
+        self.lb.config(yscrollcommand=scrollbar.set)
+        scrollbar.config(command=self.lb.yview)
+
+        # Variables Listbox widget
+        self.lb2 = tk.Listbox(self.root)
+        for k in range(len(self.properties)):
+            self.lb2.insert(k, str(self.properties[k]))
+        self.lb2.grid(row=1, column=3, sticky='N')
 
         # Buttons widget
         plot_button = tk.Button(self.root, text='Topo slice', command=self.flat_plot_instance)
         plot_button.grid(row=2, column=2, sticky='N')
 
         info_button = tk.Button(self.root, text='Clusters info', command=self.cluster_info)
-        info_button.grid(row=3, column=3)
+        info_button.grid(row=3, column=4)
 
         svm_button = tk.Button(self.root, text='SVM comparison', command=self.svm_selection)
-        svm_button.grid(row=2, column=3)
+        svm_button.grid(row=2, column=4)
+
+        prop_button = tk.Button(self.root, text='cluster contrib', command=self.cluster_contribution_proportion)
+        prop_button.grid(row=2, column=3)
 
         # Label widget
         label = tk.Label(self.root, text='Organ ID :')
         label.grid(row=0, column=2, sticky='S')
+
+        self.multiply_struct = tk.IntVar()
+        check1 = tk.Checkbutton(self.root, text="* struct_mass", variable=self.multiply_struct, onvalue=1, offvalue=0)
+        check1.grid(row=3, column=3, sticky='N')
+
+        self.divide_struct = tk.IntVar()
+        check2 = tk.Checkbutton(self.root, text="/ struct_mass", variable=self.divide_struct, onvalue=1, offvalue=0)
+        check2.grid(row=4, column=3, sticky='N')
 
         self.root.rowconfigure(0, weight=1)
         self.root.rowconfigure(1, weight=1)
@@ -260,21 +282,15 @@ class MainMenu:
             print("Only one class")
 
     def compute_group_area_between_curves(self):
-        # Check individual variables contributions to differences between clusters
-        # for each labelled cluster
-        nb_props = len(self.properties)
+        # Check individual variables contributions to differences between clusters for each labelled cluster
+        # Back to original data, grouping separated variable windows to use indexes selected by clusters
 
-        # Back to original data
-        # grouping separated variable windows to use indexes selected by clusters
-        clusters_windows = [[self.sliced_windows[win] for win in group] for group in self.clusters]
-        # For each of the clusters, for each variable, we compute the mean of values for t0, t1, ...
-        # Index 0 is used for windows because that's how the DCAE input shape was designed (1 x window x nb_props)
-        curve_sets_clusters = [[[[win[0][t][v] for win in clst] for t in range(self.window)] for v in range(nb_props)] for clst in clusters_windows]
-        # (unit = sum(flux_unit*time_step) = quantity per time_step hours)
+        clusters_windows = [self.sliced_windows[np.array(cluster)] for cluster in self.clusters]
 
         # Matrix to present main responsible for divergence between clusters through the Area Under the Curve (AUC)
         abcs = [[{} for k in range(len(self.clusters))] for i in range(len(self.clusters))]
         mean_diff_bcs = [[{} for k in range(len(self.clusters))] for i in range(len(self.clusters))]
+
         # for each row
         for k in range(len(self.clusters)):
             # for each element after diagonal in row
@@ -282,12 +298,13 @@ class MainMenu:
                 # For a given variable, get the differences of means at each time-step
                 # Then sum this to compute Area Under the curve for each variable and add it in the cross comparison matrix
                 # for each variable, label the sum to a name (dict key) for readability
-                for v in range(nb_props):
-                    step_wise_differences = [(np.mean(curve_sets_clusters[k][v][t]) - np.mean(curve_sets_clusters[l][v][t])) *
-                                                        (1-f_oneway(curve_sets_clusters[k][v][t], curve_sets_clusters[l][v][t]).pvalue) for t in range(self.window)
-                                                        if not np.isnan(f_oneway(curve_sets_clusters[k][v][t], curve_sets_clusters[l][v][t]).pvalue)]
-                    abcs[k][l][self.properties[v]] = np.sum([abs(diff) for diff in step_wise_differences])
-                    mean_diff_bcs[k][l][self.properties[v]] = np.mean(step_wise_differences) * self.window
+                # Axis 0 to mean among each window
+                step_wise_differences = np.mean(clusters_windows[k], axis=0) - np.mean(clusters_windows[l], axis=0)
+
+                # Axis 0 became for windows axis now among which we want to sum or mean now
+                # Here we took indice [0] because the previous step output was shape (1, window, len(props))
+                abcs[k][l] = dict(zip(self.properties, np.sum(np.abs(step_wise_differences[0]), axis=0)))
+                mean_diff_bcs[k][l] = dict(zip(self.properties, np.mean(step_wise_differences[0], axis=0) * self.window))
 
         return abcs, mean_diff_bcs
 
@@ -298,7 +315,7 @@ class MainMenu:
         fig3 = plt.figure(figsize=(12, 10))
         gs = gridspec.GridSpec(2, len(self.clusters), height_ratios=[1, 2], figure=fig3)
 
-        ax30 = [fig3.add_subplot(gs[0, k]) for k in range(len(self.clusters))]
+        self.ax30 = [fig3.add_subplot(gs[0, k]) for k in range(len(self.clusters))]
         ax31 = fig3.add_subplot(gs[1, :])
 
         fig3.text(0.01, 0.95, "Space-Time repartition", fontweight='bold')
@@ -307,16 +324,18 @@ class MainMenu:
         heatmap = []
         heatmap_values = []
         pair_labels = []
+
         # for each cluster combination
         for k in range(len(self.clusters)):
             times = [self.windows_time[index] for index in self.clusters[k]]
-            coords = [self.coordinates[index][-1] for index in self.clusters[k]]
+            # WARNING, here the 0 indice heavily depends on the way coordinates from xarray have been formated
+            coords = [self.coordinates[index][0] for index in self.clusters[k]]
             unique_vids = np.unique(coords)
             maxs_index = [k for k, v in sorted(dict(zip(unique_vids, [coords.count(k) for k in unique_vids])).items(),
                                                key=lambda item: item[1], reverse=True)]
 
-            ax30[k].set_title("C" + str(k) + " : " + str(int(len(self.clusters[k])/1000)) + "k / " + str(maxs_index[1:4])[1:-1])
-            ax30[k].hist2d(times, coords, bins=20, cmap="Purples")
+            self.ax30[k].set_title("C" + str(k) + " : " + str(int(len(self.clusters[k])/1000)) + "k / " + str(maxs_index[1:4])[1:-1])
+            self.ax30[k].hist2d(times, coords, bins=20, cmap="Purples")
 
             for i in range(k+1, len(self.clusters)):
                 heatmap += [list(abcs[k][i].values())]
@@ -400,9 +419,47 @@ class MainMenu:
             fig_tuckey.savefig(self.output_path + "/pairwise_tucker.png", dpi=400)
             fig_tuckey.show()
 
+    def cluster_contribution_proportion(self):
+        print("[INFO] Plot building pending...")
+        variables = [self.lb2.get(self.lb2.curselection()[0])]
+
+        fig_prop, ax = plt.subplots()
+        label = 0
+        for cluster in self.clusters:
+            # Retreive values from pre computed histogram
+            times = [self.windows_time[index] for index in cluster]
+            coords = [self.coordinates[index][0] for index in cluster]
+            indexes = tuple(zip(coords, times))
+
+            prop_tot = self.original_unorm_dataset.squeeze([dim for dim in self.original_unorm_dataset.dims if dim not in ("t", "vid")])
+
+            test = xr.zeros_like(prop_tot)
+            # TODO : REAAAAAAAAALLY INEFFICIENT BUT NO ALTERNATIVE FOUND YET
+            for vid, t in indexes:
+                test.loc[dict(vid=vid, t=t)] = 1
+
+            prop_cluster = prop_tot.where(test == 1)
+
+            for prop in variables:
+                if self.divide_struct.get() == 1:
+                    prop_ds = (getattr(prop_cluster, prop) / prop_cluster.struct_mass).mean(dim="vid") / (
+                                getattr(prop_tot, prop) / prop_tot.struct_mass).mean(dim="vid")
+                elif self.multiply_struct.get() == 1:
+                    prop_ds = (getattr(prop_cluster, prop) * prop_cluster.struct_mass).sum(dim="vid") / (
+                                getattr(prop_tot, prop) * prop_tot.struct_mass).sum(dim="vid")
+                else:
+                    prop_ds = getattr(prop_cluster, prop).sum(dim="vid") / getattr(self.original_unorm_dataset, prop).sum(dim="vid")
+
+                prop_ds.where(prop_ds > 0).plot.line(x="t", ax=ax, label="cluster " + str(label))
+            label += 1
+        ax.legend()
+        fig_prop.show()
+        print("Done")
+
     def build_app(self):
         if len(self.clusters) > 1:
             print(f"[INFO] Comparing clusters...")
             self.cluster_info()
-            self.cluster_sensitivity_test()
+            # TODO : fix latter as it echoed bug after switching to the coupling between Root-CyNAPS and Rhizodep
+            # self.cluster_sensitivity_test()
         self.root.mainloop()
