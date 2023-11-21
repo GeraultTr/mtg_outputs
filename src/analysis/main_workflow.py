@@ -22,10 +22,10 @@ test_prop = 0.2
 # UMAP Parameters
 umap_seed = 42  # Set if you want consistency (default None)
 umap_dim = 12   # Number of dimensions to reduce (max is 24)
-n_neighbors = 30  # We increase the number of neighbors to prevent focusing on too local data structure (default 15)
+n_neighbors = 50  # We increase the number of neighbors to prevent focusing on too local data structure (default 15)
 min_dist = 0.0  # We decrease this value to densely pack clusters and ease clustering (default 0)
 # HDBSCAN Parameters
-min_cluster_size = 1000  # Adjust this value if the number of produced similar clusters is to high (default 500)
+min_cluster_size = 5000  # Adjust this value if the number of produced similar clusters is to high (default 500)
 min_samples = 10  # Number of necessary neighbors to consider a point is a cluster core point (default None)
 
 

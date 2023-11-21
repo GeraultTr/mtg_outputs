@@ -50,36 +50,40 @@ class Preprocessing:
 
         # stacking to put every sliced window on the same learning slope then
         n_windows = int(1 + ((max(self.normalized_ds.coords["t"].values) - window + 1) / stride))
+        times_in_window = [k * stride for k in range(n_windows)]
 
         # Slicing the dataset into windows
         roller = self.normalized_ds.rolling(dim=dict(t=window), center=True)
         rolled_ds = roller.construct(window_dim={"t": "window_time"}, stride=stride)
         # stacking to put every sliced window on the same learning slope then
-        rolled_ds = rolled_ds.stack(window_id=[dim for dim in rolled_ds.dims if dim not in "window_time"])
+        rolled_ds = rolled_ds.stack(window_id=[dim for dim in rolled_ds.dims if dim not in "window_time"]).fillna(0)
 
         self.labels, self.t_windows = [], []
-        for coord in rolled_ds.coords["window_id"].values:
-            # Log times corresponding to each window
-            self.t_windows += [k * stride for k in range(n_windows)]
-            # Log labels for future prints
-            self.labels += [coord] * n_windows
+        for group in rolled_ds.to_array().transpose("window_id", "t", "variable", "window_time"):
+            self.t_windows += [group.t]
+            self.labels += [np.array([group.vid for k in range(len(group.t))])]
+
+        self.t_windows = list(np.concatenate(self.t_windows))
+        self.labels = list(np.concatenate(self.labels))
 
         depth = len(variables)
-
         self.stacked_win = [reshape(win, shape=(1, window, depth)) for win in np.concatenate(rolled_ds.to_array().transpose("window_id", "t", "variable", "window_time"))]
 
-        # If some windows are incomplete, they are thrown away from the training dataset.
+        # If some windows are empty, they are thrown away from the training dataset.
 
         deleted = 0
         for index in range(len(self.stacked_win)):
             i = index - deleted
-            if True in np.isnan(self.stacked_win[i]):
+            test = self.stacked_win[i] == 0
+            if False not in np.unique(test):
+                # Then everything is null
                 del self.stacked_win[i]
+                del self.t_windows[i]
+                del self.labels[i]
                 deleted += 1
 
         # Convert to array as it is expected by the DCAE
         self.stacked_da = np.array(self.stacked_win)
-
         self.unormalized_ds = self.unormalized_ds.fillna(0.)
 
     def normalization(self, dataset):
@@ -186,8 +190,8 @@ class MainMenu:
         self.coordinates = coordinates
         self.window = window
         self.windows_time = windows_time
-        self.vid_numbers = np.unique([index[0] for index in self.coordinates])
-        self.sensitivity_coordinates = [index[1:] for index in self.coordinates]
+        self.vid_numbers = np.unique([index for index in self.coordinates])
+        #self.sensitivity_coordinates = [index[1:] for index in self.coordinates]
 
         # Tk init
         self.root = tk.Tk()
@@ -329,13 +333,13 @@ class MainMenu:
         for k in range(len(self.clusters)):
             times = [self.windows_time[index] for index in self.clusters[k]]
             # WARNING, here the 0 indice heavily depends on the way coordinates from xarray have been formated
-            coords = [self.coordinates[index][0] for index in self.clusters[k]]
+            coords = [self.coordinates[index] for index in self.clusters[k]]
             unique_vids = np.unique(coords)
             maxs_index = [k for k, v in sorted(dict(zip(unique_vids, [coords.count(k) for k in unique_vids])).items(),
                                                key=lambda item: item[1], reverse=True)]
 
             self.ax30[k].set_title("C" + str(k) + " : " + str(int(len(self.clusters[k])/1000)) + "k / " + str(maxs_index[1:4])[1:-1])
-            self.ax30[k].hist2d(times, coords, bins=20, cmap="Purples")
+            self.ax30[k].hist2d(times, coords, bins=10, cmap="Purples")
 
             for i in range(k+1, len(self.clusters)):
                 heatmap += [list(abcs[k][i].values())]
@@ -425,33 +429,37 @@ class MainMenu:
 
         fig_prop, ax = plt.subplots()
         label = 0
+        len_simu = max(self.original_unorm_dataset.coords["t"])
         for cluster in self.clusters:
             # Retreive values from pre computed histogram
-            times = [self.windows_time[index] for index in cluster]
-            coords = [self.coordinates[index][0] for index in cluster]
-            indexes = tuple(zip(coords, times))
+            times = [np.arange(self.windows_time[index], self.windows_time[index] + self.window, step=1) for index in cluster if self.windows_time[index] < len_simu-self.window/2]
+            coords = [[self.coordinates[index]] * self.window for index in cluster if self.windows_time[index] < len_simu-self.window/2]
+            #times = [self.windows_time[index] for index in cluster]
+            #coords = [self.coordinates[index] for index in cluster]
+            indexes = list(set(tuple(zip(np.concatenate(coords), np.concatenate(times)))))
+            # indexes = list(set(tuple(zip(coords, times))))
 
-            prop_tot = self.original_unorm_dataset.squeeze([dim for dim in self.original_unorm_dataset.dims if dim not in ("t", "vid")])
+            prop_tot = self.original_unorm_dataset.squeeze([dim for dim in self.original_unorm_dataset.dims if dim not in ("t", "vid")]).stack(in_clust=["vid", "t"])
 
-            test = xr.zeros_like(prop_tot)
-            # TODO : REAAAAAAAAALLY INEFFICIENT BUT NO ALTERNATIVE FOUND YET
-            for vid, t in indexes:
-                test.loc[dict(vid=vid, t=t)] = 1
+            prop_cluster = prop_tot.sel(in_clust=indexes).unstack(dim="in_clust").sortby("t")
+            prop_tot = prop_tot.unstack(dim="in_clust").sortby("t")
 
-            prop_cluster = prop_tot.where(test == 1)
-
+            title = "relative contribution of " + variables[0] + ' : ' + getattr(prop_cluster, variables[0]).attrs["unit"]
             for prop in variables:
                 if self.divide_struct.get() == 1:
                     prop_ds = (getattr(prop_cluster, prop) / prop_cluster.struct_mass).mean(dim="vid") / (
                                 getattr(prop_tot, prop) / prop_tot.struct_mass).mean(dim="vid")
+                    title += ".g-1"
                 elif self.multiply_struct.get() == 1:
                     prop_ds = (getattr(prop_cluster, prop) * prop_cluster.struct_mass).sum(dim="vid") / (
                                 getattr(prop_tot, prop) * prop_tot.struct_mass).sum(dim="vid")
+                    title += ".g"
                 else:
                     prop_ds = getattr(prop_cluster, prop).sum(dim="vid") / getattr(self.original_unorm_dataset, prop).sum(dim="vid")
 
-                prop_ds.where(prop_ds > 0).plot.line(x="t", ax=ax, label="cluster " + str(label))
+                prop_ds.plot.line(x="t", ax=ax, label="cluster " + str(label))
             label += 1
+        ax.set_title(title)
         ax.legend()
         fig_prop.show()
         print("Done")

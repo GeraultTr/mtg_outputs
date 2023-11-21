@@ -227,4 +227,4 @@ def plot_xr(datasets, vertice=[], summing=0, selection=[], supplementary_legend=
     fig.canvas.mpl_connect('button_press_event', on_click)
 
     # Finally show figure
-    root.mainloop()
+    root.update()
