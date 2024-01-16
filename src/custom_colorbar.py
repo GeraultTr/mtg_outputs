@@ -19,3 +19,4 @@ def custom_colorbar(min=0, max=1, unit='Some Units'):
 
 if __name__ == '__main__':
     custom_colorbar()
+    input()
